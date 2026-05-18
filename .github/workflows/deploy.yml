@@ -1,5 +1,4 @@
 name: Build, Push & Deploy frontend
-
 on:
   push:
     branches: [ deploy ]
@@ -31,22 +30,24 @@ jobs:
           docker push $IMAGE:latest
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-push
     steps:
-      - name: Desplegar en EC2-frontend
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_FRONTEND_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+      - name: Deploy en EC2 frontend
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+          ssh -o StrictHostKeyChecking=no \
+              -i ~/.ssh/gh-actions-key \
+              ec2-user@172.31.19.136 \
+            "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
               | docker login --username AWS --password-stdin \
-                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-frontend:latest
-            docker rm -f casino-frontend || true
-            docker run -d --name casino-frontend --restart unless-stopped \
-              -p 80:8080 \
-              -e BACKEND_HOST=${{ secrets.BACKEND_HOST_PRIVATE }} \
-              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-frontend:latest
+                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com && \
+             docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-frontend:latest && \
+             docker rm -f casino-frontend || true && \
+             docker run -d --name casino-frontend --restart unless-stopped \
+               -p 80:8080 \
+               -e BACKEND_HOST=172.31.16.201 \
+               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/casino-frontend:latest"
