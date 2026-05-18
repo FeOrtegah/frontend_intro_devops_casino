@@ -6,62 +6,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
-      - id: ecr
+
+      - name: Login a ECR
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Build imagen
+
+      - name: Build y Push imagen
         run: |
           IMAGE=${{ steps.ecr.outputs.registry }}/casino-frontend
           docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-      - name: Guardar imagen
-        run: |
-          docker save 891377088059.dkr.ecr.us-east-1.amazonaws.com/casino-frontend:latest -o /tmp/image.tar
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-image
-          path: /tmp/image.tar
-
-  push:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-image
-          path: /tmp
-      - name: Cargar imagen
-        run: |
-          docker load -i /tmp/image.tar
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-      - name: Push imagen
-        run: |
-          IMAGE=${{ steps.ecr.outputs.registry }}/casino-frontend
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
 
   deploy:
     runs-on: ubuntu-latest
-    needs: push
+    needs: build-push
     steps:
-      - name: Deploy en EC2-frontend
+      - name: Desplegar en EC2-frontend
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_FRONTEND_HOST }}
